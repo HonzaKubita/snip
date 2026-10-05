@@ -10,10 +10,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/sys/unix"
 )
 
 var version = "0.1.0"
@@ -49,6 +51,7 @@ type exitCode int
 func (e exitCode) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
 
 func main() {
+	evalOut = takeEvalFD()
 	err := run(os.Args[1:])
 	var code exitCode
 	switch {
@@ -275,10 +278,40 @@ func runUI(a *app) error {
 	return nil
 }
 
+// evalOut is set when the shell integration's snip function runs us: the
+// picked command is written there and the shell runs it itself.
+var evalOut *os.File
+
+// takeEvalFD picks up the descriptor passed in SNIP_EVAL_FD. It is kept
+// from child processes like $EDITOR: one that lingers in the background
+// would hold the pipe open and leave the shell waiting.
+func takeEvalFD() *os.File {
+	s, ok := os.LookupEnv("SNIP_EVAL_FD")
+	if !ok {
+		return nil
+	}
+	os.Unsetenv("SNIP_EVAL_FD")
+	fd, err := strconv.Atoi(s)
+	if err != nil || fd < 3 {
+		return nil
+	}
+	unix.CloseOnExec(fd)
+	return os.NewFile(uintptr(fd), "snip-eval")
+}
+
 func runCommand(command string) error {
 	st := newStyles(lipgloss.NewRenderer(os.Stderr))
 	fmt.Fprintln(os.Stderr, st.faint.Render("$ "+command))
 
+	// Run by the shell integration, the command goes back to your shell, so
+	// your aliases and functions work and cd or export stick.
+	if evalOut != nil {
+		if _, err := io.WriteString(evalOut, command); err == nil {
+			return nil
+		}
+	}
+
+	// On our own we start a fresh shell, which doesn't have any of that.
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"

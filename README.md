@@ -60,6 +60,9 @@ eval "$(snip init zsh)"
 - **`Ctrl-S`** opens the picker. Whatever you already typed becomes the search
   query, and the chosen command replaces your prompt line, so you can check it
   before pressing enter and it ends up in your history.
+- **`snip`** runs the chosen snippet in your current shell, so your aliases
+  and functions work, `cd` and `export` stick, and the command ends up in
+  your history.
 - **`snip-prev`** saves the command you just ran as a new snippet.
 
 To use another key, rebind the widget after the `eval`, e.g.
@@ -82,7 +85,10 @@ snip path              print where snippets are stored
 ```
 
 `snip` with no subcommand runs the chosen command (printed as `$ …` first);
-when its output is piped it prints the command instead.
+when its output is piped it prints the command instead. With the shell
+integration loaded it runs in your current shell; without it, it runs in a
+new `$SHELL -c`, which doesn't have the aliases and functions from your
+shell config.
 
 ### Keys
 
